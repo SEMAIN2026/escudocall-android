@@ -48,33 +48,36 @@ class MainActivity : Activity() {
     private lateinit var btnSync: Button
     private lateinit var syncText: TextView
 
+    @Suppress("UNCHECKED_CAST")
+    private fun <T : View> find(id: Int): T = findViewById(id) as T
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        statusChip = findViewById(R.id.statusChip)
-        statusTitle = findViewById(R.id.statusTitle)
-        statusSub = findViewById(R.id.statusSub)
-        btnActivate = findViewById(R.id.btnActivate)
-        permContactsText = findViewById(R.id.permContactsText)
-        permContactsBtn = findViewById(R.id.permContactsBtn)
-        permNotifText = findViewById(R.id.permNotifText)
-        permNotifBtn = findViewById(R.id.permNotifBtn)
-        swUnknown = findViewById(R.id.swUnknown)
-        swPrivate = findViewById(R.id.swPrivate)
-        swIntl = findViewById(R.id.swIntl)
-        swNotify = findViewById(R.id.swNotify)
-        inputVerify = findViewById(R.id.inputVerify)
-        btnVerify = findViewById(R.id.btnVerify)
-        verifyResult = findViewById(R.id.verifyResult)
-        inputBlack = findViewById(R.id.inputBlack)
-        btnAddBlack = findViewById(R.id.btnAddBlack)
-        listBlacklist = findViewById(R.id.listBlacklist)
-        blackEmpty = findViewById(R.id.blackEmpty)
-        listHistory = findViewById(R.id.listHistory)
-        histEmpty = findViewById(R.id.histEmpty)
-        btnSync = findViewById(R.id.btnSync)
-        syncText = findViewById(R.id.syncText)
+        statusChip = find(R.id.statusChip)
+        statusTitle = find(R.id.statusTitle)
+        statusSub = find(R.id.statusSub)
+        btnActivate = find(R.id.btnActivate)
+        permContactsText = find(R.id.permContactsText)
+        permContactsBtn = find(R.id.permContactsBtn)
+        permNotifText = find(R.id.permNotifText)
+        permNotifBtn = find(R.id.permNotifBtn)
+        swUnknown = find(R.id.swUnknown)
+        swPrivate = find(R.id.swPrivate)
+        swIntl = find(R.id.swIntl)
+        swNotify = find(R.id.swNotify)
+        inputVerify = find(R.id.inputVerify)
+        btnVerify = find(R.id.btnVerify)
+        verifyResult = find(R.id.verifyResult)
+        inputBlack = find(R.id.inputBlack)
+        btnAddBlack = find(R.id.btnAddBlack)
+        listBlacklist = find(R.id.listBlacklist)
+        blackEmpty = find(R.id.blackEmpty)
+        listHistory = find(R.id.listHistory)
+        histEmpty = find(R.id.histEmpty)
+        btnSync = find(R.id.btnSync)
+        syncText = find(R.id.syncText)
 
         swUnknown.setOnCheckedChangeListener { _, checked ->
             Store.setFlag(this, "block_unknown", checked)
@@ -109,7 +112,7 @@ class MainActivity : Activity() {
 
         btnSync.setOnClickListener { doSync(manual = true) }
 
-        findViewById<TextView>(R.id.btnClearHist).setOnClickListener {
+        find<TextView>(R.id.btnClearHist).setOnClickListener {
             Store.clearHistory(this)
             renderHistory()
             Toast.makeText(this, "Historial limpiado", Toast.LENGTH_SHORT).show()
