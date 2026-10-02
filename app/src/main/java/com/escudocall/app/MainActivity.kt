@@ -2,7 +2,7 @@ package com.escudocall.app
 
 import android.Manifest
 import android.app.Activity
-import android.app.RoleManager
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface

@@ -1,7 +1,6 @@
 package com.escudocall.app
 
 import android.telecom.Call
-import android.telecom.CallResponse
 import android.telecom.CallScreeningService
 import android.telecom.PhoneAccount
 import java.util.concurrent.Executors
@@ -24,8 +23,8 @@ class ScreeningService : CallScreeningService() {
     private val io = Executors.newSingleThreadExecutor()
 
     override fun onScreenCall(details: Call.Details) {
-        val allow = CallResponse.Builder().build()
-        val block = CallResponse.Builder()
+        val allow = CallScreeningService.CallResponse.Builder().build()
+        val block = CallScreeningService.CallResponse.Builder()
             .setDisallowCall(true)
             .setRejectCall(true)
             .setSkipCallLog(true)
