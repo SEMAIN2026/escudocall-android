@@ -33,16 +33,6 @@ android {
     }
 }
 
-/*
- * android.jar de esta imagen de CI viene recortado (falta API 29+: RoleManager,
- * CallResponse...). Compilamos contra el framework REAL de Robolectric (Maven
- * Central); al ser compileOnly NO se empaqueta en el APK — el teléfono ya trae
- * esas clases en su framework.
- */
-dependencies {
-    compileOnly 'org.robolectric:android-all:15-robolectric-12650502'
-}
-
 tasks.register("showSdkInfo") {
     doLast {
         println "COMPILE_SDK=" + android.compileSdk
