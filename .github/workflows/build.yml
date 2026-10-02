@@ -22,18 +22,7 @@ jobs:
       - name: Diagnóstico SDK preinstalado
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          ls "$ANDROID_HOME" 2>/dev/null || echo "(ANDROID_HOME vacío)"
-          echo "--- platforms:"
           ls "$ANDROID_HOME/platforms" 2>/dev/null || echo "(sin platforms)"
-
-      - uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK 34
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
-          echo "--- plataformas instaladas:"
-          ls "$ANDROID_HOME/platforms"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -43,7 +32,7 @@ jobs:
         env:
           TURSO_URL: ${{ secrets.TURSO_URL }}
           TURSO_TOKEN: ${{ secrets.TURSO_TOKEN }}
-        run: gradle assembleDebug --no-daemon
+        run: gradle showSdkInfo assembleDebug --no-daemon
 
       - name: Publish release
         env:

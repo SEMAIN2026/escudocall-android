@@ -8,12 +8,12 @@ def tursoToken = System.getenv("TURSO_TOKEN") ?: ""
 
 android {
     namespace 'com.escudocall.app'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.escudocall.app"
         minSdk 29
-        targetSdk 34
+        targetSdk 35
         versionCode 1
         versionName "1.0"
         buildConfigField "String", "TURSO_URL", "\"$tursoUrl\""
@@ -30,5 +30,12 @@ android {
 
     buildTypes {
         release { minifyEnabled false }
+    }
+}
+
+tasks.register("showSdkInfo") {
+    doLast {
+        println "COMPILE_SDK=" + android.compileSdk
+        println "BOOT_CP=" + android.bootClasspath.join(File.pathSeparator)
     }
 }
