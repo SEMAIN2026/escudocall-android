@@ -36,24 +36,6 @@ jobs:
             fi
           done
 
-      - name: Reparar android.jar (la imagen trae stub recortado sin API 29+)
-        run: |
-          ROBO_URL="https://repo1.maven.org/maven2/org/robolectric/android-all/15-robolectric-12650502/android-all-15-robolectric-12650502.jar"
-          curl -sL --retry 3 -o /tmp/robo.jar "$ROBO_URL"
-          rm -rf /tmp/robo-x && mkdir -p /tmp/robo-x
-          unzip -q /tmp/robo.jar -d /tmp/robo-x
-          rm -rf /tmp/robo-x/kotlin /tmp/robo-x/META-INF /tmp/robo-x/java /tmp/robo-x/javax
-          echo "clases reales extraidas: $(find /tmp/robo-x -name '*.class' | wc -l)"
-          PLAT="$ANDROID_HOME/platforms/android-35"
-          cp "$PLAT/android.jar" /tmp/merged.jar
-          cd /tmp/robo-x
-          for d in */; do zip -q /tmp/merged.jar -r "$d"; done
-          zip -d /tmp/merged.jar '*.SF' '*.RSA' '*.DSA' >/dev/null 2>&1 || true
-          mv /tmp/merged.jar "$PLAT/android.jar"
-          echo "android.jar reparado: $(stat -c%s "$PLAT/android.jar") bytes"
-          echo "verificacion RoleManager/CallResponse:"
-          unzip -l "$PLAT/android.jar" | grep -E "app/role/RoleManager.class|CallScreeningService\\$CallResponse\\.class" | head -4
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'

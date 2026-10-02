@@ -33,7 +33,7 @@ class ScreeningService : CallScreeningService() {
 
         try {
             if (details.callDirection != Call.Details.DIRECTION_INCOMING) {
-                respond(details, allow)
+                respondToCall(details, allow)
                 return
             }
 
@@ -92,7 +92,7 @@ class ScreeningService : CallScreeningService() {
                 }
             }
 
-            respond(details, if (action == "blocked") block else allow)
+            respondToCall(details, if (action == "blocked") block else allow)
 
             val at = System.currentTimeMillis()
             val num = if (isPrivate) "" else raw
@@ -113,7 +113,7 @@ class ScreeningService : CallScreeningService() {
             }
         } catch (e: Exception) {
             try {
-                respond(details, allow)
+                respondToCall(details, allow)
             } catch (e2: Exception) {
             }
         }
