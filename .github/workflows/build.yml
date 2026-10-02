@@ -23,6 +23,18 @@ jobs:
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           ls "$ANDROID_HOME/platforms" 2>/dev/null || echo "(sin platforms)"
+          for P in android-34 android-35 android-36 android-37.2; do
+            J="$ANDROID_HOME/platforms/$P/android.jar"
+            if [ -f "$J" ]; then
+              SIZE=$(stat -c%s "$J")
+              CLASSES=$(unzip -l "$J" 2>/dev/null | grep -c "\.class" || true)
+              RM=$(unzip -l "$J" 2>/dev/null | grep -iE "app/RoleManager\.class|telecom/CallResponse" | head -3 || true)
+              echo "== $P: $SIZE bytes, $CLASSES classes"
+              echo "$RM"
+            else
+              echo "== $P: SIN android.jar"
+            fi
+          done
 
       - uses: gradle/actions/setup-gradle@v4
         with:
