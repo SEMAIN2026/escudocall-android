@@ -57,8 +57,11 @@ class ScreeningService : CallScreeningService() {
                 raw.equals("restricted", true) ||
                 raw.equals("privado", true)
 
+            // Decisión ULTRARRÁPIDA: la caché evita consultar el proveedor de
+            // contactos dentro de la ventana de ~5 segundos del sistema.
+            val cached = ContactCache.has(this, raw)
             val name = if (isPrivate) "" else (Contacts.displayName(this, raw) ?: "")
-            val inContacts = name.isNotBlank()
+            val inContacts = if (cached != null) cached || name.isNotBlank() else name.isNotBlank()
 
             // El modo estricto SOLO aplica si puedo leer los contactos:
             // si no, fallaría en bloquear hasta a tu familia (fail-safe).

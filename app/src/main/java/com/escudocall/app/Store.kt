@@ -28,7 +28,13 @@ object Store {
     fun blockPrivate(c: Context) = sp(c).getBoolean("block_private", true)
     fun blockIntl(c: Context) = sp(c).getBoolean("block_intl", true)
     fun strictMode(c: Context) = sp(c).getBoolean("strict", true)
+    fun blindaje(c: Context) = sp(c).getBoolean("blindaje", false)
     fun notifyOn(c: Context) = sp(c).getBoolean("notify", true)
+
+    fun lastRoleAsk(c: Context) = sp(c).getLong("role_ask", 0L)
+    fun setLastRoleAsk(c: Context, t: Long) {
+        sp(c).edit().putLong("role_ask", t).apply()
+    }
 
     /** Números de emergencia que SIEMPRE pasan, sin importar nada. */
     private val EMERGENCY = setOf("911", "066", "080", "089", "132", "133")

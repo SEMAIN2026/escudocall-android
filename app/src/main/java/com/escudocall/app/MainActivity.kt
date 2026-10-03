@@ -34,6 +34,7 @@ class MainActivity : Activity() {
     private lateinit var permNotifText: TextView
     private lateinit var permNotifBtn: TextView
     private lateinit var swStrict: Switch
+    private lateinit var swBlindaje: Switch
     private lateinit var swUnknown: Switch
     private lateinit var swPrivate: Switch
     private lateinit var swIntl: Switch
@@ -41,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var inputVerify: EditText
     private lateinit var btnVerify: Button
     private lateinit var verifyResult: TextView
+    private lateinit var btnMark: Button
     private lateinit var inputBlack: EditText
     private lateinit var btnAddBlack: Button
     private lateinit var listBlacklist: LinearLayout
@@ -67,6 +69,7 @@ class MainActivity : Activity() {
         permNotifText = find(R.id.permNotifText)
         permNotifBtn = find(R.id.permNotifBtn)
         swStrict = find(R.id.swStrict)
+        swBlindaje = find(R.id.swBlindaje)
         swUnknown = find(R.id.swUnknown)
         swPrivate = find(R.id.swPrivate)
         swIntl = find(R.id.swIntl)
@@ -74,6 +77,7 @@ class MainActivity : Activity() {
         inputVerify = find(R.id.inputVerify)
         btnVerify = find(R.id.btnVerify)
         verifyResult = find(R.id.verifyResult)
+        btnMark = find(R.id.btnMark)
         inputBlack = find(R.id.inputBlack)
         btnAddBlack = find(R.id.btnAddBlack)
         listBlacklist = find(R.id.listBlacklist)
@@ -121,6 +125,29 @@ class MainActivity : Activity() {
             }
         }
 
+        swBlindaje.setOnCheckedChangeListener { _, checked ->
+            Store.setFlag(this, "blindaje", checked)
+            requestDialerRole()
+        }
+
+        btnMark.setOnClickListener {
+            val num = inputVerify.text.toString().trim()
+            if (num.isBlank()) {
+                Toast.makeText(this, "Escribe un número para marcar", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "No pude marcar", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 3)
+                Toast.makeText(this, "Dale el permiso y vuelve a tocar Marcar", Toast.LENGTH_LONG).show()
+            }
+        }
+
         btnVerify.setOnClickListener { showVerdict(inputVerify.text.toString().trim()) }
 
         btnAddBlack.setOnClickListener { addToBlacklist(inputBlack.text.toString().trim()) }
@@ -151,6 +178,35 @@ class MainActivity : Activity() {
         super.onResume()
         refreshAll()
         if (Turso.enabled) maybeAutoSync()
+
+        // Capa 0: guardia en primer plano + caché de contactos + vigilante
+        if (roleHeld()) {
+            try {
+                startForegroundService(Intent(this, GuardService::class.java))
+            } catch (e: Exception) {
+            }
+            WatchdogJob.schedule(this)
+        }
+        ContactCache.refresh(this)
+
+        // Autosanación: si el rol se perdió, pedirlo de inmediato (máx. 1 vez/día)
+        if (!roleHeld() && System.currentTimeMillis() - Store.lastRoleAsk(this) > 24L * 3600L * 1000L) {
+            Store.setLastRoleAsk(this, System.currentTimeMillis())
+            requestRole()
+        }
+    }
+
+    private fun requestDialerRole() {
+        try {
+            val rm = getSystemService(RoleManager::class.java)
+            if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER), 11)
+            } else {
+                Toast.makeText(this, "Tu Android no permite cambiar el marcador", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "No pude abrir el selector de marcador", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ---------- Rol de screening (el permiso REAL de bloqueo) ----------
@@ -172,6 +228,14 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 10) refreshAll()
+        if (requestCode == 11) {
+            refreshAll()
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(this, "Blindaje total armado: EscudoCall es tu app de teléfono", Toast.LENGTH_LONG).show()
+            } else if (Store.blindaje(this)) {
+                Toast.makeText(this, "Para apagar el blindaje elige tu app de Teléfono anterior", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -199,7 +263,8 @@ class MainActivity : Activity() {
         val hasContacts = Contacts.hasPermission(this)
         val diag = "Diagnóstico · Rol de filtrado: ${if (held) "OK" else "FALTA"} · " +
             "Contactos: ${if (hasContacts) "OK" else "FALTA"} · " +
-            "Modo estricto: ${if (Store.strictMode(this)) "ON" else "off"}"
+            "Modo estricto: ${if (Store.strictMode(this)) "ON" else "off"} · " +
+            "Blindaje: ${if (Store.blindaje(this)) "ON" else "off"}"
 
         when {
             held && hasContacts -> {
@@ -259,6 +324,7 @@ class MainActivity : Activity() {
 
     private fun renderSwitches() {
         swStrict.isChecked = Store.strictMode(this)
+        swBlindaje.isChecked = Store.blindaje(this)
         swUnknown.isChecked = Store.blockUnknown(this)
         swPrivate.isChecked = Store.blockPrivate(this)
         swIntl.isChecked = Store.blockIntl(this)

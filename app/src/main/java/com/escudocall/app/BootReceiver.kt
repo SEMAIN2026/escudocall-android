@@ -31,14 +31,21 @@ class BootReceiver : BroadcastReceiver() {
                     context,
                     "La protección quedó INACTIVA tras el reinicio. Toca aquí y actívala de nuevo."
                 )
-                return
-            }
+            } else {
+                // protección puesta: levantar la guardia y el vigilante
+                try {
+                    context.startForegroundService(Intent(context, GuardService::class.java))
+                } catch (e: Exception) {
+                }
+                WatchdogJob.schedule(context)
+                ContactCache.refresh(context)
 
-            if (!Contacts.hasPermission(context)) {
-                Notifier.notifyProtectionOff(
-                    context,
-                    "Falta el permiso de CONTACTOS: sin él no puedo cortar desconocidos. Toca para arreglarlo."
-                )
+                if (!Contacts.hasPermission(context)) {
+                    Notifier.notifyProtectionOff(
+                        context,
+                        "Falta el permiso de CONTACTOS: sin él no puedo cortar desconocidos. Toca para arreglarlo."
+                    )
+                }
             }
         } catch (e: Exception) {
             // nunca rompemos el arranque del teléfono
