@@ -6,17 +6,24 @@ import android.content.Intent
 import android.app.role.RoleManager
 
 /**
- * Al encender el teléfono revisa que la protección siga puesta.
- * Algunos teléfonos (Xiaomi, Oppo, etc.) revocan el rol de filtro
- * al reiniciar: si eso pasa, avisamos con notificación al instante.
+ * Re-arma el escudo al ENCENDER el teléfono y — nuevo en v3.3 — al
+ * ACTUALIZAR/INSTALAR la app (MY_PACKAGE_REPLACED).
+ *
+ * Antes: al instalar una actualización el proceso quedaba MUERTO y nada lo
+ * despertaba hasta la siguiente llamada; ese arranque en frío era la ventana
+ * donde un número desconocido timbraba varios segundos antes de cortarse
+ * (o pasaba completo si el arranque agotaba la ventana del sistema).
+ * Ahora: segundos después de instalar, la Guardia ya está encendida y la
+ * caché RAM llena, sin necesidad de abrir la app.
  */
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED &&
-            action != "android.intent.action.QUICKBOOT_POWERON"
-        ) return
+        val boot = action == Intent.ACTION_BOOT_COMPLETED ||
+            action == "android.intent.action.QUICKBOOT_POWERON"
+        val updated = action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (!boot && !updated) return
 
         try {
             val held = try {
@@ -29,7 +36,7 @@ class BootReceiver : BroadcastReceiver() {
             if (!held) {
                 Notifier.notifyProtectionOff(
                     context,
-                    "La protección quedó INACTIVA tras el reinicio. Toca aquí y actívala de nuevo."
+                    "La protección quedó INACTIVA. Toca aquí y actívala de nuevo."
                 )
             } else {
                 // protección puesta: levantar la guardia y el vigilante

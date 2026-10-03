@@ -1,5 +1,6 @@
 package com.escudocall.app
 
+import android.content.Intent
 import android.os.SystemClock
 import android.telecom.Call
 import android.telecom.CallScreeningService
@@ -35,6 +36,16 @@ import java.util.concurrent.Executors
  *   ANTI-REDIAL (nuevo v3.1): si el mismo número vuelve a marcar en menos de
  *   90 segundos, o insiste 2+ veces en 48 h, queda en lista negra permanente
  *   al instante (antes había que esperar al segundo rechazo).
+ *
+ *   v3.3 (refuerzos tras el incidente del banco):
+ *     - FALLO SEGURO: si algo truena a mitad de la decisión y hay modo
+ *       estricto, la llamada se CORTA (antes cualquier error interno la
+ *       dejaba pasar: agujero por el que escapó la llamada del banco).
+ *     - AUTO-REPARACIÓN: tras atender cada llamada dejamos la Guardia
+ *       encendida, para que el proceso no vuelva a morir y la siguiente
+ *       llamada ya se corte relámpago.
+ *     - Si la RAM ya confirma que NO es contacto, no consultamos proveedores
+ *       antes de responder (menos milisegundos en el camino frío).
  */
 class ScreeningService : CallScreeningService() {
 
@@ -51,21 +62,23 @@ class ScreeningService : CallScreeningService() {
             .setSkipNotification(true)
             .build()
 
+        // raw/isPrivate se calculan FUERA del try: no pueden fallar y el
+        // rescate del catch los necesita para decidir con seguridad.
+        val handle = details.handle
+        val raw = if (handle != null && handle.scheme == PhoneAccount.SCHEME_TEL) {
+            (handle.schemeSpecificPart ?: "").trim()
+        } else ""
+
+        val isPrivate = raw.isBlank() || raw == "-1" ||
+            raw.equals("unknown", true) ||
+            raw.equals("restricted", true) ||
+            raw.equals("privado", true)
+
         try {
             if (details.callDirection != Call.Details.DIRECTION_INCOMING) {
                 respondToCall(details, allow)
                 return
             }
-
-            val handle = details.handle
-            val raw = if (handle != null && handle.scheme == PhoneAccount.SCHEME_TEL) {
-                (handle.schemeSpecificPart ?: "").trim()
-            } else ""
-
-            val isPrivate = raw.isBlank() || raw == "-1" ||
-                raw.equals("unknown", true) ||
-                raw.equals("restricted", true) ||
-                raw.equals("privado", true)
 
             // ---------- CAMINO RELÁMPAGO (RAM, microsegundos) ----------
             val fast = ContactCache.decide(this, raw, isPrivate)
@@ -79,7 +92,9 @@ class ScreeningService : CallScreeningService() {
 
             // ---------- CAMINO DE RESPALDO (caché no lista aún) ----------
             val cached = ContactCache.has(this, raw)
-            val name = if (isPrivate) "" else (Contacts.displayName(this, raw) ?: "")
+            // v3.3: si la RAM YA confirma que NO es contacto, no gastamos
+            // milisegundos consultando proveedores: respondemos de una vez.
+            val name = if (isPrivate || cached == false) "" else (Contacts.displayName(this, raw) ?: "")
             val inContacts = if (cached != null) cached || name.isNotBlank() else name.isNotBlank()
             val strict = Store.strictMode(this) && Contacts.hasPermission(this)
 
@@ -137,10 +152,42 @@ class ScreeningService : CallScreeningService() {
             val ms = (SystemClock.elapsedRealtime() - t0).toInt()
             finishInBackground(raw, isPrivate, type, reason, action == "blocked", ms, name)
         } catch (e: Exception) {
+            // v3.3 · FALLO SEGURO: antes este catch dejaba la llamada PASAR.
+            // En modo estricto eso es exactamente lo que no queríamos: si a
+            // mitad de la decisión algo truena, se CORTA — salvo emergencias
+            // o contactos ya confirmados por la caché.
+            val ms = (SystemClock.elapsedRealtime() - t0).toInt()
+            var cut = false
             try {
-                respondToCall(details, allow)
+                val strict = Store.strictMode(this) && Contacts.hasPermission(this)
+                val isContact = ContactCache.has(this, raw) == true
+                val emergency = !isPrivate && Store.isEmergency(raw)
+                cut = strict && !isContact && !emergency
             } catch (e2: Exception) {
             }
+            try {
+                respondToCall(details, if (cut) block else allow)
+            } catch (e2: Exception) {
+            }
+            if (cut) {
+                finishInBackground(
+                    raw, isPrivate, "error",
+                    "Falla interna: cortada por seguridad", true, ms, ""
+                )
+            }
+            kickGuard()
+        }
+    }
+
+    /**
+     * v3.3 · AUTO-REPARACIÓN: si tuvimos que despertar en frío para atender
+     * una llamada, dejamos la Guardia encendida al terminar. Así el proceso
+     * no vuelve a morir y la SIGUIENTE llamada ya se corta en milisegundos.
+     */
+    private fun kickGuard() {
+        try {
+            startForegroundService(Intent(this, GuardService::class.java))
+        } catch (e: Exception) {
         }
     }
 
@@ -161,6 +208,7 @@ class ScreeningService : CallScreeningService() {
         val num = if (isPrivate) "" else raw
         io.execute {
             try {
+                kickGuard()
                 var nm = knownName
                 if (nm.isBlank() && num.isNotBlank()) {
                     nm = Contacts.displayName(this@ScreeningService, num) ?: ""

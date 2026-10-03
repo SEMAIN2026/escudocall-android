@@ -28,8 +28,8 @@ android {
         applicationId "com.escudocall.app"
         minSdk 29
         targetSdk 35
-        versionCode 7
-        versionName "3.2"
+        versionCode 8
+        versionName "3.3"
         buildConfigField "String", "TURSO_URL", "\"$tursoUrl\""
         buildConfigField "String", "TURSO_TOKEN", "\"$tursoToken\""
     }

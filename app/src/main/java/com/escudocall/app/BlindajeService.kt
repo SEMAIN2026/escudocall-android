@@ -31,7 +31,20 @@ class BlindajeService : InCallService() {
         try {
             if (call.state == Call.STATE_RINGING) evaluateIncoming(call) else showUi(call)
         } catch (e: Exception) {
-            try { showUi(call) } catch (e2: Exception) {}
+            // v3.3 · FALLO SEGURO: si algo truena aquí, en modo estricto
+            // cortamos en vez de dejar sonar (salvo emergencias).
+            try {
+                val h = call.details?.handle
+                val r = if (h != null && h.scheme == PhoneAccount.SCHEME_TEL) {
+                    h.schemeSpecificPart ?: ""
+                } else ""
+                val strict = Store.strictMode(this) && Contacts.hasPermission(this)
+                if (strict && !Store.isEmergency(r)) {
+                    try { call.reject(false, "") } catch (e2: Exception) {}
+                } else {
+                    showUi(call)
+                }
+            } catch (e2: Exception) {}
         }
     }
 
@@ -59,11 +72,7 @@ class BlindajeService : InCallService() {
         val fast = ContactCache.decide(this, raw, isPrivate)
         if (fast != null) {
             if (fast.blocked) {
-                try {
-                    call.reject(false, "")
-                } catch (e: Exception) {
-                    try { call.reject(false, "") } catch (e2: Exception) {}
-                }
+                rejectWithSafety(call)
                 val ms = (SystemClock.elapsedRealtime() - t0).toInt()
                 logBlocked(raw, "", fast.type, fast.reason, ms)
             } else {
@@ -73,7 +82,8 @@ class BlindajeService : InCallService() {
         }
 
         val cached = ContactCache.has(this, raw)
-        val name = if (isPrivate) "" else (Contacts.displayName(this, raw) ?: "")
+        // v3.3: si la RAM ya dice que NO es contacto, no consultamos proveedores.
+        val name = if (isPrivate || cached == false) "" else (Contacts.displayName(this, raw) ?: "")
         val inContacts = if (cached != null) cached || name.isNotBlank() else name.isNotBlank()
         val strict = Store.strictMode(this) && Contacts.hasPermission(this)
 
@@ -111,17 +121,43 @@ class BlindajeService : InCallService() {
         }
 
         if (blocked) {
-            // rechazar sin mensaje (overload clásico, disponible en todas las APIs)
-            try {
-                call.reject(false, "")
-            } catch (e: Exception) {
-                try { call.reject(false, "") } catch (e2: Exception) {}
-            }
+            rejectWithSafety(call)
             val ms = (SystemClock.elapsedRealtime() - t0).toInt()
             logBlocked(raw, name, type, reason, ms)
         } else {
             showUi(call)
         }
+    }
+
+    /**
+     * v3.3: rechazar CON red de seguridad. Si el usuario alcanzó a contestar
+     * mientras decidíamos (el timbre sonó largo en un arranque en frío), el
+     * reject() ya no sirve porque la llamada queda ACTIVE: en cuanto eso
+     * pase, la COLGAMOS de inmediato con disconnect().
+     */
+    private fun rejectWithSafety(call: Call) {
+        // rechazar sin mensaje (overload clásico, disponible en todas las APIs)
+        try {
+            call.reject(false, "")
+        } catch (e: Exception) {
+            try { call.reject(false, "") } catch (e2: Exception) {}
+        }
+        try {
+            call.registerCallback(object : Call.Callback() {
+                override fun onStateChanged(c: Call, state: Int) {
+                    if (state == Call.STATE_ACTIVE) {
+                        try { c.disconnect() } catch (e: Exception) {}
+                    }
+                }
+            })
+        } catch (e: Exception) {}
+    }
+
+    /** v3.3: auto-reparación — la Guardia queda encendida tras cada llamada. */
+    private fun kickGuard() {
+        try {
+            startForegroundService(Intent(this, GuardService::class.java))
+        } catch (e: Exception) {}
     }
 
     private fun showUi(call: Call) {
@@ -138,6 +174,7 @@ class BlindajeService : InCallService() {
         val at = System.currentTimeMillis()
         io.execute {
             try {
+                kickGuard()
                 var nm = name
                 if (nm.isBlank() && num.isNotBlank()) {
                     nm = Contacts.displayName(this, num) ?: ""
