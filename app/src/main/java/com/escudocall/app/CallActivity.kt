@@ -3,7 +3,6 @@ package com.escudocall.app
 import android.app.Activity
 import android.os.Bundle
 import android.telecom.Call
-import android.telecom.VideoProfile
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -22,10 +21,6 @@ class CallActivity : Activity() {
 
     private val cb = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
-            runOnUiThread { render(state) }
-        }
-
-        override fun onDisconnected(call: Call, state: Int) {
             runOnUiThread { render(state) }
         }
     }
@@ -69,13 +64,13 @@ class CallActivity : Activity() {
         }
 
         btnAnswer.setOnClickListener {
-            try { c.answer(VideoProfile.STATE_AUDIO) } catch (e: Exception) {
+            try { c.answer(0) } catch (e: Exception) {
                 Toast.makeText(this, "No pude contestar", Toast.LENGTH_SHORT).show()
             }
         }
         btnEnd.setOnClickListener {
             try {
-                if (c.state == Call.STATE_RINGING) c.reject(Call.REJECT_REASON_DECLINED)
+                if (c.state == Call.STATE_RINGING) c.reject(false, "")
                 else c.hangup()
             } catch (e: Exception) {
                 try { c.hangup() } catch (e2: Exception) {}

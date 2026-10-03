@@ -90,10 +90,11 @@ class BlindajeService : InCallService() {
         }
 
         if (blocked) {
+            // rechazar sin mensaje (overload clásico, disponible en todas las APIs)
             try {
-                call.reject(Call.REJECT_REASON_DECLINED)
+                call.reject(false, "")
             } catch (e: Exception) {
-                try { call.reject() } catch (e2: Exception) {}
+                try { call.reject(false, "") } catch (e2: Exception) {}
             }
             logBlocked(raw, name, type, reason)
         } else {
