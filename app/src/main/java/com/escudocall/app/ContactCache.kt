@@ -178,7 +178,7 @@ object ContactCache {
             else
                 Decision(false, "privado", "Privado permitido (ajuste)")
         }
-        if (hasC && has(c, raw)) {
+        if (hasC && has(c, raw) == true) {
             val n = contactName(raw) ?: ""
             return Decision(false, "contacto", "Contacto: $n")
         }
