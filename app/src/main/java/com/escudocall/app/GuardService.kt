@@ -7,16 +7,20 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 
 /**
  * Guardia en primer plano: mantiene el proceso vivo para que, cuando llegue
  * una llamada, el sistema ligue nuestro ScreeningService AL INSTANTE y
- * respondamos dentro de la ventana de ~5 segundos. Si el proceso está muerto
- * (lo matan los OEM), el arranque en frío puede tardar más y la llamada PASA.
+ * respondamos en milisegundos. Si el proceso está muerto (lo matan los OEM),
+ * el arranque en frío agrega segundos de timbre antes del corte.
  *
- * Es la capa "0" del blindaje. Sin icono flotante raro: solo una notificación
- * fija y silenciosa "Protegiendo tus llamadas".
+ * v3.1: arranque a prueba de balas. En Android 14+ el tipo phoneCall puede
+ * ser negado según el estado del teléfono; antes, el respaldo sin tipo
+ * también fallaba con targetSdk 35 y el servicio MORÍA en silencio (causa
+ * principal del retraso de 5-10 s). Ahora probamos: phoneCall -> specialUse
+ * -> normal, y la caché se llena completa aquí mismo.
  */
 class GuardService : Service() {
 
@@ -44,23 +48,49 @@ class GuardService : Service() {
         val n: Notification = Notification.Builder(this, ch)
             .setSmallIcon(R.drawable.ic_shield)
             .setContentTitle("EscudoCall protege tus llamadas")
-            .setContentText("Contactos siempre pasan · desconocidos se cortan")
+            .setContentText("Corte relámpago listo · contactos siempre pasan")
             .setContentIntent(pi)
             .setOngoing(true)
             .build()
 
-        try {
-            startForeground(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
-        } catch (e: Exception) {
-            startForeground(id, n)
-        }
+        startForegroundBulletproof(id, n)
 
-        ContactCache.refresh(this)
+        // Primera carga COMPLETA de la caché (listas + contactos): así la
+        // primera llamada tras abrir la app ya se corta en milisegundos.
+        try {
+            ContactCache.refreshSync(this)
+            ContactCache.ensureObserver(this)
+        } catch (e: Exception) {
+        }
         WatchdogJob.schedule(this)
     }
 
+    private fun startForegroundBulletproof(id: Int, n: Notification) {
+        try {
+            startForeground(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+            return
+        } catch (e: Exception) {
+        }
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                startForeground(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                return
+            } catch (e: Exception) {
+            }
+        }
+        try {
+            startForeground(id, n)
+        } catch (e: Exception) {
+            stopSelf()
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ContactCache.refresh(this)
+        try {
+            ContactCache.refresh(this)
+            ContactCache.ensureObserver(this)
+        } catch (e: Exception) {
+        }
         return START_STICKY
     }
 }

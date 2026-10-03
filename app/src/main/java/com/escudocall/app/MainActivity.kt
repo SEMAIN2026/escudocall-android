@@ -261,10 +261,14 @@ class MainActivity : Activity() {
     private fun renderStatus() {
         val held = roleHeld()
         val hasContacts = Contacts.hasPermission(this)
+        val dialer = try {
+            getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_DIALER) ?: false
+        } catch (e: Exception) { false }
         val diag = "Diagnóstico · Rol de filtrado: ${if (held) "OK" else "FALTA"} · " +
             "Contactos: ${if (hasContacts) "OK" else "FALTA"} · " +
             "Modo estricto: ${if (Store.strictMode(this)) "ON" else "off"} · " +
-            "Blindaje: ${if (Store.blindaje(this)) "ON" else "off"}"
+            "Blindaje: ${if (Store.blindaje(this)) "ON" else "off"} · " +
+            "Marcador: ${if (dialer) "OK" else "FALTA"}"
 
         when {
             held && hasContacts -> {
@@ -302,7 +306,7 @@ class MainActivity : Activity() {
                 btnActivate.alpha = 1f
             }
         }
-        statusSub.text = "${statusSub.text}\n$diag"
+        statusSub.text = "${statusSub.text}\n$diag\nCaché RAM: ${ContactCache.summary()} · corte relámpago activo"
     }
 
     private fun renderPerms() {
@@ -470,7 +474,11 @@ class MainActivity : Activity() {
             t2.setTextColor(getColor(R.color.text))
 
             val t3 = TextView(this)
-            t3.text = fmt.format(Date(e.at))
+            t3.text = if (e.ms > 0) {
+                "${fmt.format(Date(e.at))} · corte en ${e.ms} ms"
+            } else {
+                fmt.format(Date(e.at))
+            }
             t3.textSize = 10f
             t3.setTextColor(getColor(R.color.muted))
 
@@ -506,7 +514,7 @@ class MainActivity : Activity() {
         }
         Thread {
             val ok = try {
-                Sync.run(this)
+                Sync.run(this).also { if (it) ContactCache.syncLists(this) }
             } catch (e: Exception) {
                 false
             }

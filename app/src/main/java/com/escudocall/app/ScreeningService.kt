@@ -1,14 +1,23 @@
 package com.escudocall.app
 
+import android.os.SystemClock
 import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.telecom.PhoneAccount
 import java.util.concurrent.Executors
 
 /**
- * Servicio oficial de Android (Call Screening).
- * El sistema llama a onScreenCall() por CADA llamada entrante y aquí
- * decidimos si pasa o se corta, antes de que suene.
+ * Servicio oficial de Android (Call Screening). v3.1 "corte relámpago".
+ *
+ * CAMBIO CLAVE vs v3.0: la decisión se toma 100% EN RAM (ContactCache) y
+ * respondToCall() se ejecuta DE INMEDIATO — en milisegundos, antes de que el
+ * timbre suene de verdad. Todo lo pesado (buscar el nombre, historial,
+ * notificación, sincronización) ocurre DESPUÉS, en segundo plano.
+ *
+ * Si la caché aún no está lista (proceso recién arrancado), usamos el camino
+ * de respaldo (consultar proveedores antes de responder): más lento pero
+ * seguro. La Guardia (GuardService) existe justamente para que esto casi
+ * nunca pase.
  *
  * MODOS:
  *   Normal:
@@ -22,17 +31,18 @@ import java.util.concurrent.Executors
  *
  *   MODO ESTRICTO (anti-cobradores; defecto ON):
  *     Solo pasan emergencias y contactos EXACTOS.
- *     TODO lo demás se corta: privados, desconocidos,
- *     internacionales y también la lista blanca web.
  *
- *   Extra: si un número se rechaza 2+ veces en 48 h se agrega solo
- *   a la lista negra ("Auto-bloqueado"), aunque luego apagues el modo estricto.
+ *   ANTI-REDIAL (nuevo v3.1): si el mismo número vuelve a marcar en menos de
+ *   90 segundos, o insiste 2+ veces en 48 h, queda en lista negra permanente
+ *   al instante (antes había que esperar al segundo rechazo).
  */
 class ScreeningService : CallScreeningService() {
 
     private val io = Executors.newSingleThreadExecutor()
+    private val net = Executors.newSingleThreadExecutor()
 
     override fun onScreenCall(details: Call.Details) {
+        val t0 = SystemClock.elapsedRealtime()
         val allow = CallScreeningService.CallResponse.Builder().build()
         val block = CallScreeningService.CallResponse.Builder()
             .setDisallowCall(true)
@@ -57,14 +67,20 @@ class ScreeningService : CallScreeningService() {
                 raw.equals("restricted", true) ||
                 raw.equals("privado", true)
 
-            // Decisión ULTRARRÁPIDA: la caché evita consultar el proveedor de
-            // contactos dentro de la ventana de ~5 segundos del sistema.
+            // ---------- CAMINO RELÁMPAGO (RAM, microsegundos) ----------
+            val fast = ContactCache.decide(this, raw, isPrivate)
+            if (fast != null) {
+                respondToCall(details, if (fast.blocked) block else allow)
+                val ms = (SystemClock.elapsedRealtime() - t0).toInt()
+                val known = if (fast.type == "contacto") (ContactCache.contactName(raw) ?: "") else ""
+                finishInBackground(raw, isPrivate, fast.type, fast.reason, fast.blocked, ms, known)
+                return
+            }
+
+            // ---------- CAMINO DE RESPALDO (caché no lista aún) ----------
             val cached = ContactCache.has(this, raw)
             val name = if (isPrivate) "" else (Contacts.displayName(this, raw) ?: "")
             val inContacts = if (cached != null) cached || name.isNotBlank() else name.isNotBlank()
-
-            // El modo estricto SOLO aplica si puedo leer los contactos:
-            // si no, fallaría en bloquear hasta a tu familia (fail-safe).
             val strict = Store.strictMode(this) && Contacts.hasPermission(this)
 
             var action = "allowed"
@@ -118,46 +134,82 @@ class ScreeningService : CallScreeningService() {
             }
 
             respondToCall(details, if (action == "blocked") block else allow)
-
-            val at = System.currentTimeMillis()
-            val num = if (isPrivate) "" else raw
-            io.execute {
-                try {
-                    // Auto-bloqueo de insistentes: 2+ rechazos en 48 h -> lista negra
-                    var autoBanned = false
-                    if (action == "blocked" && num.isNotBlank()) {
-                        val hits = Store.recordRejection(this@ScreeningService, num)
-                        if (hits >= 2 && !Store.inBlacklist(this@ScreeningService, num)) {
-                            Store.addBlacklist(
-                                this@ScreeningService,
-                                num,
-                                "Auto · insiste ($hits llamadas)"
-                            )
-                            autoBanned = true
-                        }
-                    }
-
-                    Store.addHistory(
-                        this@ScreeningService,
-                        Store.HistEntry(num, name, type, action, reason, at, false)
-                    )
-                    if (action == "blocked") {
-                        Notifier.notifyBlocked(
-                            this@ScreeningService,
-                            num,
-                            if (autoBanned) "$reason · ya quedó en lista negra" else reason
-                        )
-                    }
-                    if (Turso.enabled) {
-                        Sync.run(this@ScreeningService)
-                    }
-                } catch (e: Exception) {
-                }
-            }
+            val ms = (SystemClock.elapsedRealtime() - t0).toInt()
+            finishInBackground(raw, isPrivate, type, reason, action == "blocked", ms, name)
         } catch (e: Exception) {
             try {
                 respondToCall(details, allow)
             } catch (e2: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Todo lo que NO urge se hace aquí, después de haber respondido al
+     * sistema: nombre, anti-redial, historial, notificación y sincronización.
+     */
+    private fun finishInBackground(
+        raw: String,
+        isPrivate: Boolean,
+        type: String,
+        reason: String,
+        blocked: Boolean,
+        ms: Int,
+        knownName: String
+    ) {
+        val at = System.currentTimeMillis()
+        val num = if (isPrivate) "" else raw
+        io.execute {
+            try {
+                var nm = knownName
+                if (nm.isBlank() && num.isNotBlank()) {
+                    nm = Contacts.displayName(this@ScreeningService, num) ?: ""
+                }
+                var finalReason = reason
+                if (type == "contacto") finalReason = "Contacto: $nm"
+
+                var autoBanned = false
+                if (blocked && num.isNotBlank()) {
+                    val gap = Store.sinceLastRejection(this@ScreeningService, num)
+                    val hits = Store.recordRejection(this@ScreeningService, num)
+                    if ((hits >= 2 || gap < 90_000L) &&
+                        !Store.inBlacklist(this@ScreeningService, num)
+                    ) {
+                        Store.addBlacklist(
+                            this@ScreeningService,
+                            num,
+                            "Auto · insiste ($hits llamadas)"
+                        )
+                        ContactCache.refresh(this@ScreeningService)
+                        autoBanned = true
+                    }
+                }
+
+                Store.addHistory(
+                    this@ScreeningService,
+                    Store.HistEntry(
+                        num, nm, type,
+                        if (blocked) "blocked" else "allowed",
+                        finalReason, at, false, ms
+                    )
+                )
+                if (blocked) {
+                    Notifier.notifyBlocked(
+                        this@ScreeningService,
+                        num,
+                        if (autoBanned) "$finalReason · ya quedó en lista negra" else finalReason
+                    )
+                }
+                if (Turso.enabled) {
+                    net.execute {
+                        try {
+                            Sync.run(this@ScreeningService)
+                            ContactCache.syncLists(this@ScreeningService)
+                        } catch (e: Exception) {
+                        }
+                    }
+                }
+            } catch (e: Exception) {
             }
         }
     }

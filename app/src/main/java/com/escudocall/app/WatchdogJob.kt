@@ -7,6 +7,7 @@ import android.app.job.JobService
 import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 
 /**
  * Vigilante: cada ~15 minutos comprueba que el rol de filtrado y el permiso
@@ -33,6 +34,13 @@ class WatchdogJob : JobService() {
             }
             // mantener la caché de contactos fresca mientras tanto
             ContactCache.refresh(this)
+            ContactCache.ensureObserver(this)
+            // si la Guardia fue asesinada, darle otro respiro (si el sistema
+            // lo permite desde un Job; si no, START_STICKY la traerá de vuelta)
+            try {
+                startForegroundService(Intent(this, GuardService::class.java))
+            } catch (e: Exception) {
+            }
         } catch (e: Exception) {
         }
         return false

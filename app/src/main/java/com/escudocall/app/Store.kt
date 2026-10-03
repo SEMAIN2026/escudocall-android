@@ -17,7 +17,8 @@ object Store {
         val action: String,
         val reason: String,
         val at: Long,
-        var synced: Boolean
+        var synced: Boolean,
+        val ms: Int = 0
     )
 
     private fun sp(c: Context): SharedPreferences =
@@ -136,6 +137,28 @@ object Store {
         return fresh.size
     }
 
+    /**
+     * Milisegundos desde el ÚLTIMO rechazo de este número.
+     * Long.MAX_VALUE si nunca se le había rechazado.
+     * Sirve para el anti-redial: si vuelve a marcar en <90 s, ban al instante.
+     */
+    @Synchronized
+    fun sinceLastRejection(c: Context, phone: String): Long {
+        if (phone.isBlank()) return Long.MAX_VALUE
+        return try {
+            val obj = JSONObject(sp(c).getString("rejects", "{}"))
+            val arr = obj.optJSONArray(phone) ?: return Long.MAX_VALUE
+            var last = 0L
+            for (i in 0 until arr.length()) {
+                val t = arr.optLong(i, 0L)
+                if (t > last) last = t
+            }
+            if (last <= 0L) Long.MAX_VALUE else System.currentTimeMillis() - last
+        } catch (e: Exception) {
+            Long.MAX_VALUE
+        }
+    }
+
     // ---------- Historial ----------
     private fun histFile(c: Context) = File(c.filesDir, "history.json")
 
@@ -154,7 +177,8 @@ object Store {
                         o.optString("action"),
                         o.optString("reason"),
                         o.optLong("at"),
-                        o.optBoolean("s", false)
+                        o.optBoolean("s", false),
+                        o.optInt("ms", 0)
                     )
                 )
             }
@@ -197,6 +221,7 @@ object Store {
                         .put("reason", e.reason)
                         .put("at", e.at)
                         .put("s", e.synced)
+                        .put("ms", e.ms)
                 )
             }
             histFile(c).writeText(arr.toString())
