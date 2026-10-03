@@ -71,9 +71,9 @@ class CallActivity : Activity() {
         btnEnd.setOnClickListener {
             try {
                 if (c.state == Call.STATE_RINGING) c.reject(false, "")
-                else c.hangup()
+                else c.disconnect()
             } catch (e: Exception) {
-                try { c.hangup() } catch (e2: Exception) {}
+                try { c.disconnect() } catch (e2: Exception) {}
             }
             finish()
         }
