@@ -40,11 +40,25 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Restaurar firma estable
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > /home/runner/escudocall.jks
+          ls -la /home/runner/escudocall.jks
+
       - name: Build
         env:
           TURSO_URL: ${{ secrets.TURSO_URL }}
           TURSO_TOKEN: ${{ secrets.TURSO_TOKEN }}
+          KEYSTORE_FILE: /home/runner/escudocall.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: gradle showSdkInfo assembleDebug --no-daemon
+
+      - name: Verificar firma
+        run: |
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk | head -12
 
       - name: Publish release
         env:
@@ -53,4 +67,4 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk EscudoCall.apk
           gh release delete latest -y --cleanup-tag >/dev/null 2>&1 || true
           git push origin :refs/tags/latest >/dev/null 2>&1 || true
-          gh release create latest EscudoCall.apk --title "EscudoCall APK" --notes "APK firmado (debug) listo para instalar. Descargalo, abrilo y permite «orígenes desconocidos»."
+          gh release create latest EscudoCall.apk --title "EscudoCall APK" --notes "APK firmado con clave estable: cada versión nueva se instala DIRECTO encima de la anterior, sin desinstalar. Descargalo, abrilo y permite «orígenes desconocidos»."

@@ -6,6 +6,7 @@ import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -47,6 +48,7 @@ class MainActivity : Activity() {
     private lateinit var listHistory: LinearLayout
     private lateinit var histEmpty: TextView
     private lateinit var btnSync: Button
+    private lateinit var btnUpdate: Button
     private lateinit var syncText: TextView
 
     @Suppress("UNCHECKED_CAST")
@@ -79,6 +81,7 @@ class MainActivity : Activity() {
         listHistory = find(R.id.listHistory)
         histEmpty = find(R.id.histEmpty)
         btnSync = find(R.id.btnSync)
+        btnUpdate = find(R.id.btnUpdate)
         syncText = find(R.id.syncText)
 
         swStrict.setOnCheckedChangeListener { _, checked ->
@@ -123,6 +126,19 @@ class MainActivity : Activity() {
         btnAddBlack.setOnClickListener { addToBlacklist(inputBlack.text.toString().trim()) }
 
         btnSync.setOnClickListener { doSync(manual = true) }
+
+        btnUpdate.setOnClickListener {
+            try {
+                startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/SEMAIN2026/escudocall-android/releases/latest/download/EscudoCall.apk")
+                    )
+                )
+            } catch (e: Exception) {
+                Toast.makeText(this, "No encontré un navegador para descargar", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         find<TextView>(R.id.btnClearHist).setOnClickListener {
             Store.clearHistory(this)

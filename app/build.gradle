@@ -5,17 +5,31 @@ plugins {
 
 def tursoUrl = System.getenv("TURSO_URL") ?: ""
 def tursoToken = System.getenv("TURSO_TOKEN") ?: ""
+def keystoreFile = System.getenv("KEYSTORE_FILE") ?: ""
+def keystorePass = System.getenv("KEYSTORE_PASSWORD") ?: ""
+def keystoreAlias = System.getenv("KEY_ALIAS") ?: "escudocall"
 
 android {
     namespace 'com.escudocall.app'
     compileSdk 35
 
+    signingConfigs {
+        escudo {
+            if (keystoreFile != "" && file(keystoreFile).exists()) {
+                storeFile file(keystoreFile)
+                storePassword keystorePass
+                keyAlias keystoreAlias
+                keyPassword keystorePass
+            }
+        }
+    }
+
     defaultConfig {
         applicationId "com.escudocall.app"
         minSdk 29
         targetSdk 35
-        versionCode 3
-        versionName "2.1"
+        versionCode 4
+        versionName "2.2"
         buildConfigField "String", "TURSO_URL", "\"$tursoUrl\""
         buildConfigField "String", "TURSO_TOKEN", "\"$tursoToken\""
     }
@@ -29,7 +43,17 @@ android {
     kotlinOptions { jvmTarget = '17' }
 
     buildTypes {
-        release { minifyEnabled false }
+        debug {
+            if (keystoreFile != "" && file(keystoreFile).exists()) {
+                signingConfig signingConfigs.escudo
+            }
+        }
+        release {
+            minifyEnabled false
+            if (keystoreFile != "" && file(keystoreFile).exists()) {
+                signingConfig signingConfigs.escudo
+            }
+        }
     }
 }
 

@@ -686,6 +686,45 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <!-- Actualización -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Actualizar EscudoCall"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Baja la última versión firmada con la misma clave: se instala DIRECTO encima, sin desinstalar nada."
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_btn"
+                android:padding="12dp"
+                android:stateListAnimator="@null"
+                android:text="Descargar última versión"
+                android:textAllCaps="false"
+                android:textColor="@color/btnText"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
