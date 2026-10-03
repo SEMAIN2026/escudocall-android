@@ -485,6 +485,36 @@ class MainActivity : Activity() {
             row.addView(t1)
             row.addView(t2)
             row.addView(t3)
+
+            // Llamadas PERMITIDAS con número: botón para bloquearlas para
+            // siempre. La lista negra gana incluso a los contactos, así el
+            // número oficial del banco (aunque esté guardado) no vuelve a
+            // sonar jamás.
+            if (e.action != "blocked" && e.phone.isNotBlank() && e.type != "emergencia") {
+                val act = LinearLayout(this)
+                act.orientation = LinearLayout.HORIZONTAL
+                act.gravity = Gravity.END
+
+                val blk = TextView(this)
+                blk.text = "Bloquear para siempre"
+                blk.textSize = 12f
+                blk.setTypeface(null, Typeface.BOLD)
+                blk.setTextColor(getColor(R.color.red))
+                blk.setPadding(dp(4), dp(6), dp(4), dp(2))
+                blk.setOnClickListener {
+                    Store.addBlacklist(this, e.phone, e.name)
+                    ContactCache.refresh(this)
+                    Toast.makeText(
+                        this,
+                        "Quedó en lista negra: no volverá a entrar aunque esté en tus contactos",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    renderHistory()
+                }
+                act.addView(blk)
+                row.addView(act)
+            }
+
             listHistory.addView(row)
         }
     }
