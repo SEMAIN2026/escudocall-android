@@ -54,4 +54,30 @@ object Notifier {
         c.getSystemService(NotificationManager::class.java)
             ?.notify((System.currentTimeMillis() and 0x7FFFFFFF).toInt(), n)
     }
+
+    /** Aviso rojo: la protección no está operando (rol caído o falta permiso). */
+    fun notifyProtectionOff(c: Context, message: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        ensure(c)
+        val pi = PendingIntent.getActivity(
+            c, 1,
+            Intent(c, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val n = Notification.Builder(c, CH)
+            .setSmallIcon(R.drawable.ic_shield)
+            .setContentTitle("EscudoCall: protección INACTIVA")
+            .setContentText(message)
+            .setStyle(Notification.BigTextStyle().bigText(message))
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+
+        c.getSystemService(NotificationManager::class.java)
+            ?.notify(2001, n)
+    }
 }

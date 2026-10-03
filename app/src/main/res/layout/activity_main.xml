@@ -628,6 +628,14 @@
                 android:text="Aún no hay llamadas. Cuando alguien llame, aparecerá aquí."
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Importante: si una llamada de cobrador NO aparece en esta lista, Android no nos la enseñó (la protección quedó inactiva) o te llegó por WhatsApp — esas no se pueden cortar desde el sistema; silencia a los desconocidos en los ajustes de WhatsApp."
+                android:textColor="@color/amber"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <!-- Sincronización -->

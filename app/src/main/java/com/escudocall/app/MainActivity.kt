@@ -180,29 +180,48 @@ class MainActivity : Activity() {
 
     private fun renderStatus() {
         val held = roleHeld()
-        if (held) {
-            statusChip.text = "ACTIVO"
-            statusChip.setBackgroundResource(R.drawable.bg_chip_on)
-            statusTitle.text = "Protección activa"
-            statusTitle.setTextColor(getColor(R.color.green))
-            statusSub.text = if (Store.strictMode(this)) {
-                "Modo estricto ON: corta todo lo que no sea tu gente. Revisa el historial para ver el motivo de cada llamada."
-            } else {
-                "EscudoCall está filtrando cada llamada entrante: tus contactos pasan siempre, lo demás depende de tus filtros."
+        val hasContacts = Contacts.hasPermission(this)
+        val diag = "Diagnóstico · Rol de filtrado: ${if (held) "OK" else "FALTA"} · " +
+            "Contactos: ${if (hasContacts) "OK" else "FALTA"} · " +
+            "Modo estricto: ${if (Store.strictMode(this)) "ON" else "off"}"
+
+        when {
+            held && hasContacts -> {
+                statusChip.text = "ACTIVO"
+                statusChip.setBackgroundResource(R.drawable.bg_chip_on)
+                statusTitle.text = "Protección activa"
+                statusTitle.setTextColor(getColor(R.color.green))
+                statusSub.text = if (Store.strictMode(this)) {
+                    "Modo estricto ON: corta todo lo que no sea tu gente. Revisa el historial para ver el motivo de cada llamada."
+                } else {
+                    "EscudoCall está filtrando cada llamada entrante: tus contactos pasan siempre, lo demás depende de tus filtros."
+                }
+                btnActivate.text = "Protección activada"
+                btnActivate.isEnabled = false
+                btnActivate.alpha = 0.55f
             }
-            btnActivate.text = "Protección activada"
-            btnActivate.isEnabled = false
-            btnActivate.alpha = 0.55f
-        } else {
-            statusChip.text = "INACTIVO"
-            statusChip.setBackgroundResource(R.drawable.bg_chip_off)
-            statusTitle.text = "Protección inactiva"
-            statusTitle.setTextColor(getColor(R.color.red))
-            statusSub.text = "Toca el botón y acepta la ventana del sistema «Identificación de llamadas y spam». Ese es el permiso real de bloqueo que te pide Android."
-            btnActivate.text = "Activar protección"
-            btnActivate.isEnabled = true
-            btnActivate.alpha = 1f
+            held -> {
+                statusChip.text = "A MEDIAS"
+                statusChip.setBackgroundResource(R.drawable.bg_chip_off)
+                statusTitle.text = "Sin permiso de contactos"
+                statusTitle.setTextColor(getColor(R.color.amber))
+                statusSub.text = "El filtro está activo, pero SIN el permiso de contactos no sé quién es tu gente y por seguridad NO corto desconocidos. Dale el permiso en la tarjeta de abajo."
+                btnActivate.text = "Protección activada"
+                btnActivate.isEnabled = false
+                btnActivate.alpha = 0.55f
+            }
+            else -> {
+                statusChip.text = "INACTIVO"
+                statusChip.setBackgroundResource(R.drawable.bg_chip_off)
+                statusTitle.text = "Protección inactiva"
+                statusTitle.setTextColor(getColor(R.color.red))
+                statusSub.text = "Ninguna llamada está siendo filtrada. Toca el botón y acepta la ventana del sistema «Identificación de llamadas y spam». Si ya lo habías activado, el teléfono quitó el permiso: actívalo otra vez."
+                btnActivate.text = "Activar protección"
+                btnActivate.isEnabled = true
+                btnActivate.alpha = 1f
+            }
         }
+        statusSub.text = "${statusSub.text}\n$diag"
     }
 
     private fun renderPerms() {
