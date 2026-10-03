@@ -26,8 +26,17 @@ object Store {
     // ---------- Ajustes ----------
     fun blockUnknown(c: Context) = sp(c).getBoolean("block_unknown", true)
     fun blockPrivate(c: Context) = sp(c).getBoolean("block_private", true)
-    fun blockIntl(c: Context) = sp(c).getBoolean("block_intl", false)
+    fun blockIntl(c: Context) = sp(c).getBoolean("block_intl", true)
+    fun strictMode(c: Context) = sp(c).getBoolean("strict", true)
     fun notifyOn(c: Context) = sp(c).getBoolean("notify", true)
+
+    /** Números de emergencia que SIEMPRE pasan, sin importar nada. */
+    private val EMERGENCY = setOf("911", "066", "080", "089", "132", "133")
+
+    fun isEmergency(number: String): Boolean {
+        val d = digits(number)
+        return d.isNotEmpty() && d in EMERGENCY
+    }
 
     fun setFlag(c: Context, key: String, value: Boolean) {
         sp(c).edit().putBoolean(key, value).apply()
@@ -87,6 +96,39 @@ object Store {
 
     fun inWhitelist(c: Context, number: String): Boolean =
         whitelist(c).any { sameNumber(it, number) }
+
+    // ---------- Auto-bloqueo de números insistentes ----------
+    // Guarda los rechazos recientes por número (ventana de 48 h).
+    // Devuelve cuántos rechazos lleva en la ventana.
+    @Synchronized
+    fun recordRejection(c: Context, phone: String): Int {
+        if (phone.isBlank()) return 0
+        val sp = sp(c)
+        val obj = try {
+            JSONObject(sp.getString("rejects", "{}"))
+        } catch (e: Exception) {
+            JSONObject()
+        }
+        val now = System.currentTimeMillis()
+        val window = 48L * 3600L * 1000L
+        val arr = obj.optJSONArray(phone) ?: JSONArray()
+        val fresh = mutableListOf<Long>()
+        for (i in 0 until arr.length()) {
+            val t = arr.optLong(i, 0L)
+            if (t > 0 && now - t < window) fresh.add(t)
+        }
+        fresh.add(now)
+        val out = JSONArray()
+        for (t in fresh) out.put(t)
+        obj.put(phone, out)
+        // poda: máximo 40 números con historial de rechazos
+        if (obj.length() > 40) {
+            val keys = obj.keys().asSequence().toList()
+            for (k in keys.take(obj.length() - 40)) obj.remove(k)
+        }
+        sp.edit().putString("rejects", obj.toString()).apply()
+        return fresh.size
+    }
 
     // ---------- Historial ----------
     private fun histFile(c: Context) = File(c.filesDir, "history.json")
@@ -178,6 +220,10 @@ object Store {
 
     fun isInternational(s: String): Boolean {
         val t = s.trim()
-        return t.startsWith("+") && !t.startsWith("+52")
+        // Cobradores usan VoIP: números extranjeros (+1, +34, +44...) o
+        // prefijos 00/010 marcados desde México. Todo eso cuenta como internacional.
+        val d = digits(t)
+        return (t.startsWith("+") && !t.startsWith("+52")) ||
+            t.startsWith("00") || t.startsWith("01") && d.length > 11
     }
 }

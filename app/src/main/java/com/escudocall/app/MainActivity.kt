@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var permContactsBtn: TextView
     private lateinit var permNotifText: TextView
     private lateinit var permNotifBtn: TextView
+    private lateinit var swStrict: Switch
     private lateinit var swUnknown: Switch
     private lateinit var swPrivate: Switch
     private lateinit var swIntl: Switch
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
         permContactsBtn = find(R.id.permContactsBtn)
         permNotifText = find(R.id.permNotifText)
         permNotifBtn = find(R.id.permNotifBtn)
+        swStrict = find(R.id.swStrict)
         swUnknown = find(R.id.swUnknown)
         swPrivate = find(R.id.swPrivate)
         swIntl = find(R.id.swIntl)
@@ -79,6 +81,16 @@ class MainActivity : Activity() {
         btnSync = find(R.id.btnSync)
         syncText = find(R.id.syncText)
 
+        swStrict.setOnCheckedChangeListener { _, checked ->
+            Store.setFlag(this, "strict", checked)
+            if (checked) {
+                Toast.makeText(
+                    this,
+                    "Modo estricto: solo tus contactos y el 911 pasan",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
         swUnknown.setOnCheckedChangeListener { _, checked ->
             Store.setFlag(this, "block_unknown", checked)
         }
@@ -173,7 +185,11 @@ class MainActivity : Activity() {
             statusChip.setBackgroundResource(R.drawable.bg_chip_on)
             statusTitle.text = "Protección activa"
             statusTitle.setTextColor(getColor(R.color.green))
-            statusSub.text = "EscudoCall está filtrando cada llamada entrante: tus contactos pasan siempre, lo demás depende de tus filtros."
+            statusSub.text = if (Store.strictMode(this)) {
+                "Modo estricto ON: corta todo lo que no sea tu gente. Revisa el historial para ver el motivo de cada llamada."
+            } else {
+                "EscudoCall está filtrando cada llamada entrante: tus contactos pasan siempre, lo demás depende de tus filtros."
+            }
             btnActivate.text = "Protección activada"
             btnActivate.isEnabled = false
             btnActivate.alpha = 0.55f
@@ -207,6 +223,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderSwitches() {
+        swStrict.isChecked = Store.strictMode(this)
         swUnknown.isChecked = Store.blockUnknown(this)
         swPrivate.isChecked = Store.blockPrivate(this)
         swIntl.isChecked = Store.blockIntl(this)
@@ -223,14 +240,18 @@ class MainActivity : Activity() {
             number.equals("private", true) ||
             number.equals("unknown", true)
         val name = if (isPriv) null else Contacts.displayName(this, number)
+        val strict = Store.strictMode(this) && Contacts.hasPermission(this)
 
         val msg: String
         val colorRes: Int
         when {
+            !isPriv && Store.isEmergency(number) -> {
+                msg = "Pasaría: número de emergencia (siempre pasa)."; colorRes = R.color.green
+            }
             !isPriv && Store.inBlacklist(this, number) -> {
                 msg = "Se CORTARÍA: está en tu lista negra."; colorRes = R.color.red
             }
-            isPriv && Store.blockPrivate(this) -> {
+            isPriv && (strict || Store.blockPrivate(this)) -> {
                 msg = "Se CORTARÍA: número privado u oculto."; colorRes = R.color.red
             }
             isPriv -> {
@@ -238,6 +259,9 @@ class MainActivity : Activity() {
             }
             name != null -> {
                 msg = "Pasaría: es tu contacto ($name)."; colorRes = R.color.green
+            }
+            strict -> {
+                msg = "Se CORTARÍA: modo estricto — solo tus contactos pasan."; colorRes = R.color.red
             }
             Store.inWhitelist(this, number) -> {
                 msg = "Pasaría: está en tu lista blanca."; colorRes = R.color.green

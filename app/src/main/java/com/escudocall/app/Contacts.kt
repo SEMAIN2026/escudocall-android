@@ -24,12 +24,22 @@ object Contacts {
                 )
                 c.contentResolver.query(
                     uri,
-                    arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+                    arrayOf(
+                        ContactsContract.PhoneLookup.DISPLAY_NAME,
+                        ContactsContract.PhoneLookup.NUMBER
+                    ),
                     null, null, null
                 )?.use { cur ->
-                    if (cur.moveToFirst()) {
+                    // IMPORTANTE: el filtro de Android hace coincidencia difusa
+                    // (puede emparejar solo con los últimos 7 dígitos). Aquí
+                    // exigimos coincidencia EXACTA del número completo (o los
+                    // últimos 10 dígitos, que en México es el número completo).
+                    while (cur.moveToNext()) {
                         val name = cur.getString(0)
-                        if (!name.isNullOrBlank()) return name
+                        val contactNum = cur.getString(1) ?: continue
+                        if (!name.isNullOrBlank() && Store.sameNumber(contactNum, number)) {
+                            return name
+                        }
                     }
                 }
             } catch (e: Exception) {

@@ -10,13 +10,23 @@ import java.util.concurrent.Executors
  * El sistema llama a onScreenCall() por CADA llamada entrante y aquí
  * decidimos si pasa o se corta, antes de que suene.
  *
- * Prioridad (igual que EscudoCall web):
- *   1. Lista negra            -> SIEMPRE se corta
- *   2. Número privado         -> se corta (ajuste)
- *   3. Contactos              -> SIEMPRE pasan
- *   4. Lista blanca (web)     -> pasan
- *   5. Internacional          -> se corta (ajuste)
- *   6. Desconocidos           -> se cortan (ajuste)
+ * MODOS:
+ *   Normal:
+ *     1. Emergencias (911...)   -> SIEMPRE pasan
+ *     2. Lista negra            -> SIEMPRE se corta
+ *     3. Número privado         -> se corta (ajuste)
+ *     4. Contactos (EXACTO)     -> SIEMPRE pasan
+ *     5. Lista blanca (web)     -> pasan
+ *     6. Internacional          -> se corta (ajuste, por defecto ON)
+ *     7. Desconocidos           -> se cortan (ajuste)
+ *
+ *   MODO ESTRICTO (anti-cobradores; defecto ON):
+ *     Solo pasan emergencias y contactos EXACTOS.
+ *     TODO lo demás se corta: privados, desconocidos,
+ *     internacionales y también la lista blanca web.
+ *
+ *   Extra: si un número se rechaza 2+ veces en 48 h se agrega solo
+ *   a la lista negra ("Auto-bloqueado"), aunque luego apagues el modo estricto.
  */
 class ScreeningService : CallScreeningService() {
 
@@ -50,17 +60,24 @@ class ScreeningService : CallScreeningService() {
             val name = if (isPrivate) "" else (Contacts.displayName(this, raw) ?: "")
             val inContacts = name.isNotBlank()
 
+            // El modo estricto SOLO aplica si puedo leer los contactos:
+            // si no, fallaría en bloquear hasta a tu familia (fail-safe).
+            val strict = Store.strictMode(this) && Contacts.hasPermission(this)
+
             var action = "allowed"
             var reason = ""
             var type = ""
 
             when {
+                !isPrivate && Store.isEmergency(raw) -> {
+                    type = "emergencia"; reason = "Número de emergencia: siempre pasa"
+                }
                 !isPrivate && Store.inBlacklist(this, raw) -> {
                     type = "lista_negra"; action = "blocked"; reason = "En tu lista negra"
                 }
                 isPrivate -> {
                     type = "privado"
-                    if (Store.blockPrivate(this)) {
+                    if (strict || Store.blockPrivate(this)) {
                         action = "blocked"; reason = "Número privado"
                     } else {
                         reason = "Privado permitido (ajuste)"
@@ -68,6 +85,11 @@ class ScreeningService : CallScreeningService() {
                 }
                 inContacts -> {
                     type = "contacto"; reason = "Contacto: $name"
+                }
+                strict -> {
+                    type = "estricto"
+                    action = "blocked"
+                    reason = "Modo estricto: solo tus contactos pasan"
                 }
                 Store.inWhitelist(this, raw) -> {
                     type = "lista_blanca"; reason = "Lista blanca EscudoCall"
@@ -98,12 +120,30 @@ class ScreeningService : CallScreeningService() {
             val num = if (isPrivate) "" else raw
             io.execute {
                 try {
+                    // Auto-bloqueo de insistentes: 2+ rechazos en 48 h -> lista negra
+                    var autoBanned = false
+                    if (action == "blocked" && num.isNotBlank()) {
+                        val hits = Store.recordRejection(this@ScreeningService, num)
+                        if (hits >= 2 && !Store.inBlacklist(this@ScreeningService, num)) {
+                            Store.addBlacklist(
+                                this@ScreeningService,
+                                num,
+                                "Auto · insiste ($hits llamadas)"
+                            )
+                            autoBanned = true
+                        }
+                    }
+
                     Store.addHistory(
                         this@ScreeningService,
                         Store.HistEntry(num, name, type, action, reason, at, false)
                     )
                     if (action == "blocked") {
-                        Notifier.notifyBlocked(this@ScreeningService, num, reason)
+                        Notifier.notifyBlocked(
+                            this@ScreeningService,
+                            num,
+                            if (autoBanned) "$reason · ya quedó en lista negra" else reason
+                        )
                     }
                     if (Turso.enabled) {
                         Sync.run(this@ScreeningService)
